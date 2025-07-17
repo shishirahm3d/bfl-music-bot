@@ -10,6 +10,7 @@ const path = require("path");
 const axios = require('axios');
 const { autoplayCollection } = require('./mongodb.js');
 const guildTrackMessages = new Map();
+const guildCurrentTracks = new Map(); // Store current track info for each guild
 
 async function sendMessageWithPermissionsCheck(channel, embed, attachment, actionRow1, actionRow2) {
     try {
@@ -77,9 +78,15 @@ function initializePlayer(client) {
         // Clean up previous track messages for this guild
         await cleanupPreviousTrackMessages(channel, guildId);
 
+        // Store current track info for later use
+        guildCurrentTracks.set(guildId, {
+            info: track.info,
+            requester: requesters.get(trackUri)
+        });
+
         try {
             const musicard = await Dynamic({
-                thumbnailImage: track.info.thumbnail || 'https://example.com/default_thumbnail.png',
+                thumbnailImage: track.info.thumbnail || 'https://media.discordapp.net/attachments/674531732929904640/788440918256123974/BFL-Official.jpg?ex=6879cc13&is=68787a93&hm=21fef225201d2dcd46717d21dcb32d202a2fb96781b160eea260685a7fb5ba1c&=&format=webp',
                 backgroundColor: '#070707',
                 progress: 10,
                 progressColor: '#FF7A00',
@@ -142,7 +149,11 @@ function initializePlayer(client) {
     });
 
     client.riffy.on("trackEnd", async (player) => {
-        await cleanupTrackMessages(client, player);
+        console.log("🎵 Track ended, updating music card...");
+        // Update the music card to show it's finished instead of deleting it
+        setTimeout(async () => {
+            await updateTrackCardToFinished(client, player);
+        }, 500); // Small delay to ensure the player state is updated
     });
 
     client.riffy.on("playerDisconnect", async (player) => {
@@ -165,10 +176,18 @@ function initializePlayer(client) {
                     await channel.send("⚠️ **No more tracks to autoplay. Disconnecting...**");
                 }
             } else {
-                await cleanupTrackMessages(client, player);
+                // Update the music card before sending the queue ended message
+                await updateTrackCardToFinished(client, player);
+                
+                // Don't cleanup track messages - keep music card visible forever
                 console.log(`Autoplay is disabled for guild: ${guildId}`);
-                player.destroy();
-                await channel.send("🎶 **Queue has ended. Autoplay is disabled.**");
+                await channel.send("🎶 **Queue has ended. Autoplay is disabled. Disconnecting in 3 minutes...**");
+                setTimeout(async () => {
+                    if (player && !player.queue.size) {
+                        player.destroy();
+                        channel.send("⏰ **3 minutes have passed. Disconnecting from voice channel.**");
+                    }
+                }, 180000);
             }
         } catch (error) {
             console.error("Error handling autoplay:", error);
@@ -198,6 +217,97 @@ async function cleanupPreviousTrackMessages(channel, guildId) {
 
     // Clear the previous messages for this guild
     guildTrackMessages.set(guildId, []);
+}
+
+// New function to update track card when song finishes
+async function updateTrackCardToFinished(client, player) {
+    const guildId = player.guildId;
+    const messages = guildTrackMessages.get(guildId) || [];
+    
+    console.log(`📝 Attempting to update track card for guild: ${guildId}`);
+    console.log(`📨 Found ${messages.length} messages to check`);
+    
+    for (const messageInfo of messages) {
+        if (messageInfo.type === 'track') {
+            try {
+                const channel = client.channels.cache.get(messageInfo.channelId);
+                if (channel) {
+                    const message = await channel.messages.fetch(messageInfo.messageId).catch(() => null);
+                    if (message) {
+                        console.log("📤 Found message to update");
+                        
+                        // Get track info from stored data or player
+                        const storedTrack = guildCurrentTracks.get(guildId);
+                        let track = storedTrack?.info || player.current?.info || player.previousTrack?.info;
+                        let requester = storedTrack?.requester;
+                        
+                        if (!track) {
+                            console.log("❌ No track info available, skipping update");
+                            return;
+                        }
+                        console.log(`🎵 Updating card for track: ${track.title}`);
+
+                        // Create updated music card with 100% progress
+                        const musicard = await Dynamic({
+                            thumbnailImage: track.thumbnail || 'https://media.discordapp.net/attachments/674531732929904640/788440918256123974/BFL-Official.jpg?ex=6879cc13&is=68787a93&hm=21fef225201d2dcd46717d21dcb32d202a2fb96781b160eea260685a7fb5ba1c&=&format=webp',
+                            backgroundColor: '#070707',
+                            progress: 100,
+                            progressColor: '#FF7A00',
+                            progressBarColor: '#5F2D00',
+                            name: track.title,
+                            nameColor: '#FF7A00',
+                            author: track.author || 'Unknown Artist',
+                            authorColor: '#696969',
+                        });
+
+                        // Save the updated card
+                        const cardPath = path.join(__dirname, 'musicard_finished.png');
+                        fs.writeFileSync(cardPath, musicard);
+
+                        // Create updated embed
+                        const attachment = new AttachmentBuilder(cardPath, { name: 'musicard_finished.png' });
+                        const embed = new EmbedBuilder()
+                            .setAuthor({ 
+                                name: 'Song Finished', 
+                                iconURL: musicIcons.stopIcon,
+                                url: config.SupportServer
+                            })
+                            .setFooter({ text: `Developed by Shishir Ahmed | BFL Music`, iconURL: musicIcons.heartIcon })
+                            .setTimestamp()
+                            .setDescription(  
+                                `- **Title:** [${track.title}](${track.uri})\n` +
+                                `- **Author:** ${track.author || 'Unknown Artist'}\n` +
+                                `- **Length:** ${formatDuration(track.length)}\n` +
+                                `- **Requester:** ${requester}\n` +
+                                `- **Source:** ${track.sourceName}\n` + 
+                                '**- Status:** ✅ **Completed**\n' +
+                                '**- Controls :**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 🎤 `Lyrics`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol +`, 🔉 `Vol -`')
+                            .setImage('attachment://musicard_finished.png')
+                            .setColor('#00FF00'); // Green color to indicate completion
+
+                        // Create disabled action rows
+                        const actionRow1 = createActionRow1(true); // Disable buttons
+                        const actionRow2 = createActionRow2(true); // Disable buttons
+
+                        // Update the message
+                        await message.edit({
+                            embeds: [embed],
+                            files: [attachment],
+                            components: [actionRow1, actionRow2]
+                        });
+                        
+                        console.log("✅ Successfully updated music card to finished state");
+                    } else {
+                        console.log("❌ Message not found");
+                    }
+                } else {
+                    console.log("❌ Channel not found");
+                }
+            } catch (error) {
+                console.error("❌ Error updating track card to finished:", error);
+            }
+        }
+    }
 }
 
 // New function to clean up track-related messages
