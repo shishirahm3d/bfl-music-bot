@@ -98,11 +98,11 @@ function initializePlayer(client) {
             });
 
             // Save the generated card to a file
-            const cardPath = path.join(__dirname, 'musicard.png');
+            const cardPath = path.join(__dirname, 'musicard_start.png');
             fs.writeFileSync(cardPath, musicard);
 
             // Prepare the attachment and embed
-            const attachment = new AttachmentBuilder(cardPath, { name: 'musicard.png' });
+            const attachment = new AttachmentBuilder(cardPath, { name: 'musicard_start.png' });
             const embed = new EmbedBuilder()
             .setAuthor({ 
                 name: 'Playing Song..', 
@@ -117,7 +117,7 @@ function initializePlayer(client) {
                 `- **Length:** ${formatDuration(track.info.length)}\n` +
                 `- **Requester:** ${requester}\n` +
                 `- **Source:** ${track.info.sourceName}\n` + '**- Controls :**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 🎤 `Lyrics`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol +`, 🔉 `Vol -`')
-            .setImage('attachment://musicard.png')
+            .setImage('attachment://musicard_start.png')
             .setColor('#FF7A00');
 
             const actionRow1 = createActionRow1(false);
