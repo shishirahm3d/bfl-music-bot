@@ -13,7 +13,7 @@ module.exports = {
             const githubLink = "https://github.com/shishirahm3d";
             const youtubeLink = "https://www.youtube.com/@BFLGamingBD";
             const facebookLink = "https://www.facebook.com/BrothersForLifeBD";
-            const websiteLink = "http://bflmusic.shishirahmed.me/";
+            const websiteLink = "http://bflmusic.shishirahmed.me";
 
             const embed = new EmbedBuilder()
                 .setColor('#b300ff')
