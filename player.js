@@ -11,6 +11,7 @@ const axios = require('axios');
 const { autoplayCollection } = require('./mongodb.js');
 const guildTrackMessages = new Map();
 const guildCurrentTracks = new Map(); // Store current track info for each guild
+const guildDisconnectTimeouts = new Map(); // Store disconnect timeouts for each guild
 
 async function sendMessageWithPermissionsCheck(channel, embed, attachment, actionRow1, actionRow2) {
     try {
@@ -74,6 +75,14 @@ function initializePlayer(client) {
         const guildId = player.guildId;
         const trackUri = track.info.uri;
         const requester = requesters.get(trackUri);
+
+        // Clear any existing disconnect timeout when a new track starts
+        const existingTimeout = guildDisconnectTimeouts.get(guildId);
+        if (existingTimeout) {
+            clearTimeout(existingTimeout);
+            guildDisconnectTimeouts.delete(guildId);
+            console.log(`🔄 Cleared disconnect timeout for guild: ${guildId} - new track started`);
+        }
 
         // Clean up previous track messages for this guild
         await cleanupPreviousTrackMessages(channel, guildId);
@@ -157,6 +166,15 @@ function initializePlayer(client) {
     });
 
     client.riffy.on("playerDisconnect", async (player) => {
+        const guildId = player.guildId;
+        
+        // Clear any existing disconnect timeout when player disconnects
+        const existingTimeout = guildDisconnectTimeouts.get(guildId);
+        if (existingTimeout) {
+            clearTimeout(existingTimeout);
+            guildDisconnectTimeouts.delete(guildId);
+        }
+        
         await cleanupTrackMessages(client, player);
     });
 
@@ -182,12 +200,42 @@ function initializePlayer(client) {
                 // Don't cleanup track messages - keep music card visible forever
                 console.log(`Autoplay is disabled for guild: ${guildId}`);
                 await channel.send("🎶 **Queue has ended. Autoplay is disabled. Disconnecting in 3 minutes...**");
-                setTimeout(async () => {
-                    if (player && !player.queue.size) {
-                        player.destroy();
-                        channel.send("⏰ **3 minutes have passed. Disconnecting from voice channel.**");
+                
+                // Set a timeout for disconnection, but store it so we can clear it if needed
+                const timeoutId = setTimeout(async () => {
+                    try {
+                        // Get the current player instance for this guild
+                        const currentPlayer = client.riffy.players.get(guildId);
+                        
+                        console.log(`🔍 Checking disconnect conditions for guild ${guildId}:`);
+                        console.log(`   - Player exists: ${!!currentPlayer}`);
+                        if (currentPlayer) {
+                            console.log(`   - Queue size: ${currentPlayer.queue.size}`);
+                            console.log(`   - Current track: ${!!currentPlayer.current}`);
+                            console.log(`   - Player state: ${currentPlayer.state || 'unknown'}`);
+                            console.log(`   - Is playing: ${currentPlayer.playing || false}`);
+                        }
+                        
+                        if (currentPlayer && 
+                            currentPlayer.queue.size === 0 && 
+                            !currentPlayer.playing) {
+                            console.log(`⏰ 3 minutes passed for guild ${guildId}, disconnecting...`);
+                            currentPlayer.destroy();
+                            await channel.send("⏰ **3 minutes have passed. Disconnecting from voice channel.**");
+                        } else {
+                            console.log(`⏰ Not disconnecting guild ${guildId} - conditions not met`);
+                            if (currentPlayer) {
+                                console.log(`   - Reason: Queue=${currentPlayer.queue.size}, Playing=${currentPlayer.playing}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error("Error in disconnect timeout:", error);
                     }
-                }, 180000);
+                    guildDisconnectTimeouts.delete(guildId);
+                }, 180000); // 3 minutes timeout
+                
+                // Store the timeout so we can clear it if a new song starts
+                guildDisconnectTimeouts.set(guildId, timeoutId);
             }
         } catch (error) {
             console.error("Error handling autoplay:", error);
@@ -314,6 +362,14 @@ async function updateTrackCardToFinished(client, player) {
 async function cleanupTrackMessages(client, player) {
     const guildId = player.guildId;
     const messages = guildTrackMessages.get(guildId) || [];
+    
+    // Clear any existing disconnect timeout
+    const existingTimeout = guildDisconnectTimeouts.get(guildId);
+    if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        guildDisconnectTimeouts.delete(guildId);
+        console.log(`🧹 Cleared disconnect timeout during cleanup for guild: ${guildId}`);
+    }
     
     for (const messageInfo of messages) {
         try {
