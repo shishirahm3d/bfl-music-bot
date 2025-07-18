@@ -84,8 +84,8 @@ function initializePlayer(client) {
             console.log(`🔄 Cleared disconnect timeout for guild: ${guildId} - new track started`);
         }
 
-        // Clean up previous track messages for this guild
-        await cleanupPreviousTrackMessages(channel, guildId);
+        // Don't clean up previous track messages - keep them visible forever
+        // await cleanupPreviousTrackMessages(channel, guildId);
 
         // Store current track info for later use
         guildCurrentTracks.set(guildId, {
@@ -175,7 +175,9 @@ function initializePlayer(client) {
             guildDisconnectTimeouts.delete(guildId);
         }
         
-        await cleanupTrackMessages(client, player);
+        // Don't cleanup track messages - keep them visible forever
+        // await cleanupTrackMessages(client, player);
+        console.log(`🔌 Player disconnected for guild: ${guildId} - keeping music cards visible`);
     });
 
     client.riffy.on("queueEnd", async (player) => {
@@ -189,7 +191,8 @@ function initializePlayer(client) {
                 const nextTrack = await player.autoplay(player);
     
                 if (!nextTrack) {
-                    await cleanupTrackMessages(client, player);
+                    // Don't cleanup track messages - keep them visible forever
+                    // await cleanupTrackMessages(client, player);
                     player.destroy();
                     await channel.send("⚠️ **No more tracks to autoplay. Disconnecting...**");
                 }
@@ -239,7 +242,8 @@ function initializePlayer(client) {
             }
         } catch (error) {
             console.error("Error handling autoplay:", error);
-            await cleanupTrackMessages(client, player);
+            // Don't cleanup track messages - keep them visible forever
+            // await cleanupTrackMessages(client, player);
             player.destroy();
             await channel.send("👾**Queue Empty! Disconnecting...**");
         }
@@ -358,10 +362,9 @@ async function updateTrackCardToFinished(client, player) {
     }
 }
 
-// New function to clean up track-related messages
+// Modified function to only clear timeouts, not delete messages
 async function cleanupTrackMessages(client, player) {
     const guildId = player.guildId;
-    const messages = guildTrackMessages.get(guildId) || [];
     
     // Clear any existing disconnect timeout
     const existingTimeout = guildDisconnectTimeouts.get(guildId);
@@ -371,22 +374,11 @@ async function cleanupTrackMessages(client, player) {
         console.log(`🧹 Cleared disconnect timeout during cleanup for guild: ${guildId}`);
     }
     
-    for (const messageInfo of messages) {
-        try {
-            const channel = client.channels.cache.get(messageInfo.channelId);
-            if (channel) {
-                const message = await channel.messages.fetch(messageInfo.messageId).catch(() => null);
-                if (message) {
-                    await message.delete().catch(() => {});
-                }
-            }
-        } catch (error) {
-            console.error("Error cleaning up track message:", error);
-        }
-    }
-
-    // Clear the messages for this guild
-    guildTrackMessages.set(guildId, []);
+    // Don't delete messages anymore - keep them visible forever
+    console.log(`📌 Keeping music cards visible for guild: ${guildId}`);
+    
+    // Don't clear the messages for this guild anymore
+    // guildTrackMessages.set(guildId, []);
 }
 function formatDuration(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
