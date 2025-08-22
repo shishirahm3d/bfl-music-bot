@@ -16,9 +16,10 @@ function createProgressBar(current, total, length = 20) {
 
 async function nowPlaying(client, interaction, lang) {
     try {
-        const player = client.riffy.players.get(interaction.guildId);
+        const player = client.audioManager.getPlayer(interaction.guildId);
+        const currentTrack = client.audioManager.getCurrentTrack(interaction.guildId);
 
-        if (!player) {
+        if (!player || !currentTrack) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('#ff0000')
                 .setAuthor({ 
@@ -33,7 +34,9 @@ async function nowPlaying(client, interaction, lang) {
             return;
         }
 
-        const progressBar = createProgressBar(player.position / 1000, player.current.info.length / 1000);
+        // For now, we'll show a simplified now playing without progress bar
+        // since getting exact playback position requires more complex implementation
+        const progressBar = createProgressBar(0, currentTrack.duration / 1000);
 
         const npEmbed = new EmbedBuilder()
             .setColor(config.embedColor)
@@ -42,9 +45,9 @@ async function nowPlaying(client, interaction, lang) {
                 iconURL: musicIcons.beats2Icon,
                 url: config.SupportServer
             })
-            .setDescription(`- [${player.current.info.title} - ${player.current.info.author}](${player.current.info.uri})\n\n${progressBar}`)
+            .setDescription(`- [${currentTrack.title} - ${currentTrack.author}](${currentTrack.url})\n\n${progressBar}`)
             .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-            .setThumbnail(player.current.info.thumbnail);
+            .setThumbnail(currentTrack.thumbnail);
 
         await interaction.reply({ embeds: [npEmbed] });
 

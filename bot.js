@@ -20,7 +20,7 @@ client.on("ready", () => {
     console.log(`${colors.cyan}[ SYSTEM ]${colors.reset} ${colors.green}Client logged as ${colors.yellow}${client.user.tag}${colors.reset}`);
     console.log(`${colors.cyan}[ MUSIC ]${colors.reset} ${colors.green}BFL Music System Ready 🎵${colors.reset}`);
     console.log(`${colors.cyan}[ TIME ]${colors.reset} ${colors.gray}${new Date().toISOString().replace('T', ' ').split('.')[0]}${colors.reset}`);
-    client.riffy.init(client.user.id);
+    client.audioManager.init(client.user.id);
 });
 client.config = config;
 
@@ -56,9 +56,8 @@ fs.readdir(config.commandsDir, (err, files) => {
 
 
 client.on("raw", (d) => {
-    const { GatewayDispatchEvents } = require("discord.js");
-    if (![GatewayDispatchEvents.VoiceStateUpdate, GatewayDispatchEvents.VoiceServerUpdate].includes(d.t)) return;
-    client.riffy.updateVoiceState(d);
+    // The new audio manager handles voice state updates differently
+    // This raw handler is not needed for @discordjs/voice
 });
 
 client.login(config.TOKEN || process.env.TOKEN).catch((e) => {

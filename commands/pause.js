@@ -4,7 +4,7 @@ const musicIcons = require('../ui/icons/musicicons.js');
 
 async function pause(client, interaction, lang) {
     try {
-        const player = client.riffy.players.get(interaction.guildId);
+        const player = client.audioManager.getPlayer(interaction.guildId);
 
         if (!player) {
             const errorEmbed = new EmbedBuilder()
@@ -21,7 +21,15 @@ async function pause(client, interaction, lang) {
             return;
         }
 
-        player.pause(true);
+        const success = client.audioManager.pause(interaction.guildId);
+        
+        if (!success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setDescription("❌ Unable to pause the player.");
+            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            return;
+        }
 
         const embed = new EmbedBuilder()
             .setColor(config.embedColor)

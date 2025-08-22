@@ -155,7 +155,7 @@ module.exports = {
     embed: {
         error: "Error",
         noVoiceChannel: "- You need to be in a voice channel to use this command.",
-        noLavalinkNodes: "- No available Lavalink nodes to process the request.",
+        noAudioManager: "- Audio manager not available to process the request.",
         noResults: "- No results found.",
         requestUpdated: "Request Updated!",
         successProcessed: "- Your request has been successfully processed.\n- Please use buttons to control playback",

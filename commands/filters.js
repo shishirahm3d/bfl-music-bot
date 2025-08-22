@@ -4,94 +4,24 @@ const musicIcons = require('../ui/icons/musicicons.js');
 
 async function filters(client, interaction, lang) {
     try {
-        const player = client.riffy.players.get(interaction.guildId);
-
-        if (!player) {
-            const embed = new EmbedBuilder()
-                .setColor('#ff0000')
-                .setAuthor({
-                    name: lang.filters.embed.error,
-                    iconURL: musicIcons.alertIcon,
-                    url: config.SupportServer
-                })
-                .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-                .setDescription(lang.filters.embed.noPlayer);
-
-            await interaction.reply({ embeds: [embed], ephemeral: true });
-            return;
-        }
-
-        if (!interaction.member.voice.channelId || interaction.member.voice.channelId !== player.voiceChannel) {
-            const embed = new EmbedBuilder()
-                .setColor('#ff0000')
-                .setAuthor({
-                    name: lang.filters.embed.error,
-                    iconURL: musicIcons.alertIcon,
-                    url: config.SupportServer
-                })
-                .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-                .setDescription(lang.filters.embed.wrongChannel);
-
-            await interaction.reply({ embeds: [embed], ephemeral: true });
-            return;
-        }
-
-        const selectedFilter = interaction.options.getString('filter');
-
-        if (selectedFilter === 'clear') {
-            player.filters.clearFilters();
-            await interaction.reply({ content: lang.filters.embed.filtersCleared, ephemeral: true });
-            return;
-        }
-
-        switch (selectedFilter) {
-            case 'karaoke':
-                player.filters.setKaraoke(true);
-                break;
-            case 'timescale':
-                player.filters.setTimescale(true, { speed: 1.2, pitch: 1.2 });
-                break;
-            case 'tremolo':
-                player.filters.setTremolo(true, { frequency: 4, depth: 0.75 });
-                break;
-            case 'vibrato':
-                player.filters.setVibrato(true, { frequency: 4, depth: 0.75 });
-                break;
-            case 'rotation':
-                player.filters.setRotation(true, { rotationHz: 0.2 });
-                break;
-            case 'distortion':
-                player.filters.setDistortion(true, { sinScale: 1, cosScale: 1 });
-                break;
-            case 'channelmix':
-                player.filters.setChannelMix(true, { leftToLeft: 0.5, leftToRight: 0.5, rightToLeft: 0.5, rightToRight: 0.5 });
-                break;
-            case 'lowpass':
-                player.filters.setLowPass(true, { smoothing: 0.5 });
-                break;
-            case 'bassboost':
-                player.filters.setBassboost(true, { value: 3 });
-                break;
-            default:
-                await interaction.reply({ content: lang.filters.embed.invalidFilter, ephemeral: true });
-                return;
-        }
-
-        await interaction.reply({ content: lang.filters.embed.filterApplied.replace("{filter}", selectedFilter), ephemeral: true });
-
-    } catch (error) {
-        console.error('Error processing filters command:', error);
-
-        const errorEmbed = new EmbedBuilder()
-            .setColor('#ff0000')
+        // Audio filters are not implemented in the Node.js audio manager yet
+        const embed = new EmbedBuilder()
+            .setColor('#ff9900')
             .setAuthor({
-                name: lang.filters.embed.error,
+                name: "Filters Not Available",
                 iconURL: musicIcons.alertIcon,
                 url: config.SupportServer
             })
             .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-            .setDescription(lang.filters.embed.errorProcessing);
+            .setDescription("🚧 **Audio filters are coming soon!**\n\nThis feature is currently being developed for the new Node.js audio system.");
 
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (error) {
+        console.error('Error processing filters command:', error);
+        const errorEmbed = new EmbedBuilder()
+            .setColor('#ff0000')
+            .setDescription("❌ An error occurred while processing the filters command.");
+        
         if (interaction.replied || interaction.deferred) {
             await interaction.editReply({ embeds: [errorEmbed] });
         } else {

@@ -61,7 +61,8 @@ async function play(client, interaction, lang) {
             return;
         }
 
-        if (!client.riffy.nodes || client.riffy.nodes.size === 0) {
+        // Check if audio manager is available
+        if (!client.audioManager) {
             const embed = new EmbedBuilder()
                 .setColor('#ff0000')
                 .setAuthor({
@@ -70,23 +71,37 @@ async function play(client, interaction, lang) {
                     url: config.SupportServer
                 })
                 .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-                .setDescription(lang.play.embed.noLavalinkNodes);
+                .setDescription("Audio manager not initialized. Please try again.");
 
             await interaction.reply({ embeds: [embed], ephemeral: true });
             return;
         }
 
-        const player = client.riffy.createConnection({
-            guildId: interaction.guildId,
-            voiceChannel: interaction.member.voice.channelId,
-            textChannel: interaction.channelId,
-            deaf: true
-        });
+        // Get or create player
+        let player = client.audioManager.getPlayer(interaction.guild.id);
+
+        if (!player) {
+            try {
+                player = await client.audioManager.joinChannel(
+                    interaction.guild.id,
+                    interaction.member.voice.channelId,
+                    interaction.channel.id
+                );
+            } catch (error) {
+                console.error('Error joining voice channel:', error);
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setDescription("❌ Failed to join voice channel.");
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                return;
+            }
+        }
 
         await interaction.deferReply();
 
         let tracksToQueue = [];
         let isPlaylist = false;
+        let queuedTracks = 0;
 
         if (query.includes('spotify.com')) {
             try {
@@ -106,56 +121,50 @@ async function play(client, interaction, lang) {
                 return;
             }
         } else {
-            
-            const resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
+            // Use our new audio manager to search
+            try {
+                const searchResults = await client.audioManager.searchTrack(query);
+                if (searchResults.length === 0) {
+                    const errorEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setAuthor({ 
+                        name: lang.play.embed.error,
+                        iconURL: musicIcons.alertIcon,
+                        url: config.SupportServer
+                    })
+                    .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
+                    .setDescription(lang.play.embed.noResults);
 
-            if (!resolve || typeof resolve !== 'object' || !Array.isArray(resolve.tracks)) {
-                throw new TypeError('Invalid response from Riffy');
-            }
-
-            if (resolve.loadType === 'playlist') {
-                isPlaylist = true;
-                for (const track of resolve.tracks) {
-                    track.info.requester = interaction.user.username;
-                    player.queue.add(track);
-                    requesters.set(track.info.uri, interaction.user.username);
+                    await interaction.followUp({ embeds: [errorEmbed] });
+                    return;
                 }
-            } else if (resolve.loadType === 'search' || resolve.loadType === 'track') {
-                const track = resolve.tracks.shift();
-                track.info.requester = interaction.user.username;
-                player.queue.add(track);
-                requesters.set(track.info.uri, interaction.user.username);
-            } else {
-                const errorEmbed = new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setAuthor({ 
-                    name: lang.play.embed.error,
-                    iconURL: musicIcons.alertIcon,
-                    url: config.SupportServer
-                })
-                .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-                .setDescription(lang.play.embed.noResults);
-
-            await interaction.followUp({ embeds: [errorEmbed] });
+                
+                // Add the track to the queue
+                await client.audioManager.play(interaction.guild.id, searchResults[0], interaction.user);
+                requesters.set(searchResults[0].url, interaction.user);
+                queuedTracks = 1;
+            } catch (error) {
+                console.error('Search error:', error);
+                await interaction.followUp({ content: "❌ Failed to search for tracks." });
                 return;
             }
         }
 
-        let queuedTracks = 0;
-
-       
+        // Process Spotify tracks if any
         for (const trackQuery of tracksToQueue) {
-            const resolve = await client.riffy.resolve({ query: trackQuery, requester: interaction.user.username });
-            if (resolve.tracks.length > 0) {
-                const trackInfo = resolve.tracks[0];
-                player.queue.add(trackInfo);
-                requesters.set(trackInfo.uri, interaction.user.username);
-                queuedTracks++;
+            try {
+                const searchResults = await client.audioManager.searchTrack(trackQuery);
+                if (searchResults.length > 0) {
+                    await client.audioManager.play(interaction.guild.id, searchResults[0], interaction.user);
+                    requesters.set(searchResults[0].url, interaction.user);
+                    queuedTracks++;
+                }
+            } catch (error) {
+                console.error('Error queueing track:', error);
             }
         }
 
-        if (!player.playing && !player.paused) player.play();
-
+        // Send success message
         const randomEmbed = new EmbedBuilder()
         .setColor(config.embedColor)
         .setAuthor({
@@ -163,7 +172,9 @@ async function play(client, interaction, lang) {
             iconURL: musicIcons.beats2Icon,
             url: config.SupportServer
         })
-        .setDescription(lang.play.embed.successProcessed)
+        .setDescription(isPlaylist ? 
+            `🎵 Added **${queuedTracks}** tracks to the queue` : 
+            `🎵 Added **1** track to the queue`)
         .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon });
     
         const message = await interaction.followUp({ embeds: [randomEmbed] });

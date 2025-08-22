@@ -4,18 +4,23 @@
   "description": "BFL Music Bot is a Discord music bot that provides a variety of music-related features, including song requests, playlists, and more.",
   "main": "index.js",
   "dependencies": {
-    "axios": "^1.8.1",
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.0",
+    "@distube/ytdl-core": "^4.16.12",
+    "@snazzah/davey": "^0.1.6",
     "discord.js": "^14.15.1",
     "dotenv": "^16.4.7",
     "express": "^4.19.2",
+    "ffmpeg-static": "^5.2.0",
+    "libsodium-wrappers": "^0.7.15",
     "mongodb": "^6.12.0",
     "musicard": "^2.0.5",
     "node-fetch": "^2.7.0",
-    "riffy": "^1.0.3",
-    "songcard": "^1.2.13",
+    "opusscript": "^0.0.8",
+    "prism-media": "^1.3.5",
     "spotify-url-info": "^3.2.18",
     "spotify-web-api-node": "^5.0.2",
-    "yt-search": "^2.12.1"
+    "youtube-sr": "^4.3.12"
   },
   "scripts": {
     "start": "node index.js"

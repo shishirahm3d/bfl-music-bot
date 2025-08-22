@@ -4,9 +4,10 @@ const musicIcons = require('../ui/icons/musicicons.js');
 
 async function shuffle(client, interaction, lang) {
     try {
-        const player = client.riffy.players.get(interaction.guildId);
+        const player = client.audioManager.getPlayer(interaction.guildId);
+        const queue = client.audioManager.getQueue(interaction.guildId);
 
-        if (!player || !player.queue || player.queue.length === 0) {
+        if (!player || !queue || queue.length === 0) {
             const embed = new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setAuthor({
@@ -21,10 +22,15 @@ async function shuffle(client, interaction, lang) {
             return;
         }
 
-        // Shuffle the queue
-        for (let i = player.queue.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [player.queue[i], player.queue[j]] = [player.queue[j], player.queue[i]];
+        // Shuffle the queue using the audio manager
+        const success = client.audioManager.shuffle(interaction.guildId);
+        
+        if (!success) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setDescription("❌ Unable to shuffle the queue.");
+            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            return;
         }
 
         const embed = new EmbedBuilder()

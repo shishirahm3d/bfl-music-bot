@@ -9,7 +9,7 @@ module.exports = async (client) => {
     (async () => {
         try {
             await rest.put(Routes.applicationCommands(client.user.id), {
-                body: await client.commands,
+                body: client.commands,
             });
             console.log("✅ Commands Loaded Successfully");
         } catch (err) {
@@ -23,31 +23,25 @@ module.exports = async (client) => {
     };
 
     async function updateStatus() {
- 
-        const activePlayers = Array.from(client.riffy.players.values()).filter(player => player.playing);
+        // Since we're using the new audio manager, we'll just keep the default status for now
+        // You can enhance this later to check active players from the audio manager
+        client.user.setActivity(defaultActivity);
+        return;
 
-        if (!activePlayers.length) {
-            //console.log("⏹️ No song is currently playing. Setting default status.");
-            client.user.setActivity(defaultActivity);
-            return;
-        }
-
-        const player = activePlayers[0];
-
-        if (!player.current || !player.current.info || !player.current.info.title) {
-            //console.log("⚠️ Current track info is missing. Keeping default status.");
-            return;
-        }
-
-        const trackName = player.current.info.title;
-        //console.log(`🎵 Now Playing: ${trackName}`);
-
-        client.user.setActivity({
-            name: `🎸 ${trackName}`,
-            type: ActivityType.Playing
-        });
+        // TODO: Implement status updates with the new audio manager
+        // const activePlayers = client.audioManager.getActivePlayers();
+        // if (activePlayers.length > 0) {
+        //     const currentTrack = client.audioManager.getCurrentTrack(activePlayers[0].guildId);
+        //     if (currentTrack) {
+        //         client.user.setActivity({
+        //             name: `🎵 ${currentTrack.title}`,
+        //             type: ActivityType.Listening
+        //         });
+        //     }
+        // }
     }
 
+    // Update status every 5 seconds
     setInterval(updateStatus, 5000);
 
     client.errorLog = config.errorLog;

@@ -4,7 +4,7 @@ const musicIcons = require('../ui/icons/musicicons.js');
 
 async function volume(client, interaction, lang) {
     try {
-        const player = client.riffy.players.get(interaction.guildId);
+        const player = client.audioManager.getPlayer(interaction.guildId);
         const volume = interaction.options.getInteger('level');
 
         if (!player) {
@@ -26,7 +26,15 @@ async function volume(client, interaction, lang) {
             return interaction.reply({ content: lang.volume.volumeRangeError, ephemeral: true });
         }
 
-        player.setVolume(volume);
+        const newVolume = client.audioManager.setVolume(interaction.guildId, volume);
+        
+        if (newVolume === null) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setDescription("❌ Unable to set volume.");
+            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            return;
+        }
 
         const embed = new EmbedBuilder()
             .setColor(config.embedColor)
@@ -36,7 +44,7 @@ async function volume(client, interaction, lang) {
                 url: config.SupportServer
             })
             .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-            .setDescription(lang.volume.embed.volumeUpdatedDescription.replace("{volume}", volume));
+            .setDescription(lang.volume.embed.volumeUpdatedDescription.replace("{volume}", newVolume));
 
         return interaction.reply({ embeds: [embed] });
     } catch (error) {

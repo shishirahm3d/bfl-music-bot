@@ -1,4 +1,4 @@
-const { Riffy, Player } = require("riffy");
+const { AudioManager } = require("./audioManager");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionsBitField } = require("discord.js");
 const { requesters } = require("./commands/play");
 const { Dynamic } = require("musicard");
@@ -7,7 +7,7 @@ const musicIcons = require('./ui/icons/musicicons.js');
 const colors = require('./ui/colors/colors.js');
 const fs = require("fs");
 const path = require("path");
-const axios = require('axios');
+const fetch = require('node-fetch');
 const { autoplayCollection } = require('./mongodb.js');
 const guildTrackMessages = new Map();
 const guildCurrentTracks = new Map(); // Store current track info for each guild
@@ -40,41 +40,14 @@ async function sendMessageWithPermissionsCheck(channel, embed, attachment, actio
 }
 
 function initializePlayer(client) {
-    const nodes = config.nodes.map(node => ({
-        name: node.name,
-        host: node.host,
-        port: node.port,
-        password: node.password,
-        secure: node.secure,
-        reconnectTimeout: 5000,
-        reconnectTries: Infinity
-    }));
+    // Initialize the Node.js Audio Manager
+    client.audioManager = new AudioManager(client);
 
-    client.riffy = new Riffy(client, nodes, {
-        send: (payload) => {
-            const guildId = payload.d.guild_id;
-            if (!guildId) return;
-
-            const guild = client.guilds.cache.get(guildId);
-            if (guild) guild.shard.send(payload);
-        },
-        defaultSearchPlatform: "ytmsearch",
-        restVersion: "v4",
-    });
-
-    client.riffy.on("nodeConnect", node => {
-        console.log(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.green}Node ${node.name} Connected ✅${colors.reset}`);
-    });
-    
-    client.riffy.on("nodeError", (node, error) => {
-        console.log(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.red}Node ${node.name} Error ❌ | ${error.message}${colors.reset}`);
-    });
-
-    client.riffy.on("trackStart", async (player, track) => {
+    // Set up event listeners for the audio manager
+    client.audioManager.on("trackStart", async (player, track) => {
         const channel = client.channels.cache.get(player.textChannel);
         const guildId = player.guildId;
-        const trackUri = track.info.uri;
-        const requester = requesters.get(trackUri);
+        const requester = track.requester;
 
         // Clear any existing disconnect timeout when a new track starts
         const existingTimeout = guildDisconnectTimeouts.get(guildId);
@@ -84,25 +57,22 @@ function initializePlayer(client) {
             console.log(`🔄 Cleared disconnect timeout for guild: ${guildId} - new track started`);
         }
 
-        // Don't clean up previous track messages - keep them visible forever
-        // await cleanupPreviousTrackMessages(channel, guildId);
-
         // Store current track info for later use
         guildCurrentTracks.set(guildId, {
-            info: track.info,
-            requester: requesters.get(trackUri)
+            info: track,
+            requester: requester
         });
 
         try {
             const musicard = await Dynamic({
-                thumbnailImage: track.info.thumbnail || 'https://media.discordapp.net/attachments/674531732929904640/788440918256123974/BFL-Official.jpg?ex=6879cc13&is=68787a93&hm=21fef225201d2dcd46717d21dcb32d202a2fb96781b160eea260685a7fb5ba1c&=&format=webp',
+                thumbnailImage: track.thumbnail || 'https://media.discordapp.net/attachments/674531732929904640/788440918256123974/BFL-Official.jpg?ex=6879cc13&is=68787a93&hm=21fef225201d2dcd46717d21dcb32d202a2fb96781b160eea260685a7fb5ba1c&=&format=webp',
                 backgroundColor: '#070707',
                 progress: 10,
                 progressColor: '#FF7A00',
                 progressBarColor: '#5F2D00',
-                name: track.info.title,
+                name: track.title,
                 nameColor: '#FF7A00',
-                author: track.info.author || 'Unknown Artist',
+                author: track.author || 'Unknown Artist',
                 authorColor: '#696969',
             });
 
@@ -121,11 +91,11 @@ function initializePlayer(client) {
             .setFooter({ text: `Developed by Shishir Ahmed | BFL Music`, iconURL: musicIcons.heartIcon })
             .setTimestamp()
             .setDescription(  
-                `- **Title:** [${track.info.title}](${track.info.uri})\n` +
-                `- **Author:** ${track.info.author || 'Unknown Artist'}\n` +
-                `- **Length:** ${formatDuration(track.info.length)}\n` +
+                `- **Title:** [${track.title}](${track.url})\n` +
+                `- **Author:** ${track.author || 'Unknown Artist'}\n` +
+                `- **Length:** ${formatDuration(track.duration)}\n` +
                 `- **Requester:** ${requester}\n` +
-                `- **Source:** ${track.info.sourceName}\n` + '**- Controls :**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 🎤 `Lyrics`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol +`, 🔉 `Vol -`')
+                `- **Source:** ${track.platform}\n` + '**- Controls :**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 🎤 `Lyrics`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol +`, 🔉 `Vol -`')
             .setImage('attachment://musicard_start.png')
             .setColor('#FF7A00');
 
@@ -157,7 +127,7 @@ function initializePlayer(client) {
         }
     });
 
-    client.riffy.on("trackEnd", async (player) => {
+    client.audioManager.on("trackEnd", async (player) => {
         console.log("🎵 Track ended, updating music card...");
         // Update the music card to show it's finished instead of deleting it
         setTimeout(async () => {
@@ -165,22 +135,7 @@ function initializePlayer(client) {
         }, 500); // Small delay to ensure the player state is updated
     });
 
-    client.riffy.on("playerDisconnect", async (player) => {
-        const guildId = player.guildId;
-        
-        // Clear any existing disconnect timeout when player disconnects
-        const existingTimeout = guildDisconnectTimeouts.get(guildId);
-        if (existingTimeout) {
-            clearTimeout(existingTimeout);
-            guildDisconnectTimeouts.delete(guildId);
-        }
-        
-        // Don't cleanup track messages - keep them visible forever
-        // await cleanupTrackMessages(client, player);
-        console.log(`🔌 Player disconnected for guild: ${guildId} - keeping music cards visible`);
-    });
-
-    client.riffy.on("queueEnd", async (player) => {
+    client.audioManager.on("queueEnd", async (player) => {
         const channel = client.channels.cache.get(player.textChannel);
         const guildId = player.guildId;
     
@@ -188,48 +143,18 @@ function initializePlayer(client) {
             const autoplaySetting = await autoplayCollection.findOne({ guildId });
     
             if (autoplaySetting?.autoplay) {
-                const nextTrack = await player.autoplay(player);
-    
-                if (!nextTrack) {
-                    // Don't cleanup track messages - keep them visible forever
-                    // await cleanupTrackMessages(client, player);
-                    player.destroy();
-                    await channel.send("⚠️ **No more tracks to autoplay. Disconnecting...**");
-                }
-            } else {
-                // Update the music card before sending the queue ended message
-                await updateTrackCardToFinished(client, player);
+                // Handle autoplay logic here if needed
+                console.log(`Autoplay enabled for guild: ${guildId}, but not implemented yet`);
+                await channel.send("🎶 **Queue has ended. Autoplay coming soon...**");
                 
-                // Don't cleanup track messages - keep music card visible forever
-                console.log(`Autoplay is disabled for guild: ${guildId}`);
-                await channel.send("🎶 **Queue has ended. Autoplay is disabled. Disconnecting in 3 minutes...**");
-                
-                // Set a timeout for disconnection, but store it so we can clear it if needed
+                // Set a timeout for disconnection
                 const timeoutId = setTimeout(async () => {
                     try {
-                        // Get the current player instance for this guild
-                        const currentPlayer = client.riffy.players.get(guildId);
-                        
-                        console.log(`🔍 Checking disconnect conditions for guild ${guildId}:`);
-                        console.log(`   - Player exists: ${!!currentPlayer}`);
-                        if (currentPlayer) {
-                            console.log(`   - Queue size: ${currentPlayer.queue.size}`);
-                            console.log(`   - Current track: ${!!currentPlayer.current}`);
-                            console.log(`   - Player state: ${currentPlayer.state || 'unknown'}`);
-                            console.log(`   - Is playing: ${currentPlayer.playing || false}`);
-                        }
-                        
-                        if (currentPlayer && 
-                            currentPlayer.queue.size === 0 && 
-                            !currentPlayer.playing) {
+                        const currentPlayer = client.audioManager.getPlayer(guildId);
+                        if (currentPlayer && !currentPlayer.isPlaying) {
                             console.log(`⏰ 3 minutes passed for guild ${guildId}, disconnecting...`);
-                            currentPlayer.destroy();
+                            client.audioManager.disconnect(guildId);
                             await channel.send("⏰ **3 minutes have passed. Disconnecting from voice channel.**");
-                        } else {
-                            console.log(`⏰ Not disconnecting guild ${guildId} - conditions not met`);
-                            if (currentPlayer) {
-                                console.log(`   - Reason: Queue=${currentPlayer.queue.size}, Playing=${currentPlayer.playing}`);
-                            }
                         }
                     } catch (error) {
                         console.error("Error in disconnect timeout:", error);
@@ -237,17 +162,57 @@ function initializePlayer(client) {
                     guildDisconnectTimeouts.delete(guildId);
                 }, 180000); // 3 minutes timeout
                 
-                // Store the timeout so we can clear it if a new song starts
+                guildDisconnectTimeouts.set(guildId, timeoutId);
+            } else {
+                // Update the music card before sending the queue ended message
+                await updateTrackCardToFinished(client, player);
+                
+                console.log(`Autoplay is disabled for guild: ${guildId}`);
+                await channel.send("🎶 **Queue has ended. Autoplay is disabled. Disconnecting in 3 minutes...**");
+                
+                // Set a timeout for disconnection
+                const timeoutId = setTimeout(async () => {
+                    try {
+                        const currentPlayer = client.audioManager.getPlayer(guildId);
+                        
+                        console.log(`🔍 Checking disconnect conditions for guild ${guildId}:`);
+                        console.log(`   - Player exists: ${!!currentPlayer}`);
+                        if (currentPlayer) {
+                            console.log(`   - Queue size: ${client.audioManager.getQueue(guildId).length}`);
+                            console.log(`   - Is playing: ${currentPlayer.isPlaying || false}`);
+                        }
+                        
+                        if (currentPlayer && 
+                            client.audioManager.getQueue(guildId).length === 0 && 
+                            !currentPlayer.isPlaying) {
+                            console.log(`⏰ 3 minutes passed for guild ${guildId}, disconnecting...`);
+                            client.audioManager.disconnect(guildId);
+                            await channel.send("⏰ **3 minutes have passed. Disconnecting from voice channel.**");
+                        } else {
+                            console.log(`⏰ Not disconnecting guild ${guildId} - conditions not met`);
+                        }
+                    } catch (error) {
+                        console.error("Error in disconnect timeout:", error);
+                    }
+                    guildDisconnectTimeouts.delete(guildId);
+                }, 180000); // 3 minutes timeout
+                
                 guildDisconnectTimeouts.set(guildId, timeoutId);
             }
         } catch (error) {
             console.error("Error handling autoplay:", error);
-            // Don't cleanup track messages - keep them visible forever
-            // await cleanupTrackMessages(client, player);
-            player.destroy();
+            client.audioManager.disconnect(guildId);
             await channel.send("👾**Queue Empty! Disconnecting...**");
         }
     });
+
+    client.audioManager.on("trackError", async (player, error) => {
+        console.error("Track error:", error);
+        const channel = client.channels.cache.get(player.textChannel);
+        await channel.send("❌ **An error occurred while playing the track. Skipping...**");
+    });
+
+    console.log(`${colors.cyan}[ AUDIO ]${colors.reset} ${colors.green}Node.js Audio Manager initialized ✅${colors.reset}`);
 }
 
 async function cleanupPreviousTrackMessages(channel, guildId) {
@@ -327,11 +292,11 @@ async function updateTrackCardToFinished(client, player) {
                             .setFooter({ text: `Developed by Shishir Ahmed | BFL Music`, iconURL: musicIcons.heartIcon })
                             .setTimestamp()
                             .setDescription(  
-                                `- **Title:** [${track.title}](${track.uri})\n` +
+                                `- **Title:** [${track.title}](${track.url})\n` +
                                 `- **Author:** ${track.author || 'Unknown Artist'}\n` +
-                                `- **Length:** ${formatDuration(track.length)}\n` +
+                                `- **Length:** ${formatDuration(track.duration)}\n` +
                                 `- **Requester:** ${requester}\n` +
-                                `- **Source:** ${track.sourceName}\n` + 
+                                `- **Source:** ${track.platform}\n` + 
                                 '**- Status:** ✅ **Completed**\n' +
                                 '**- Controls :**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 🎤 `Lyrics`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol +`, 🔉 `Vol -`')
                             .setImage('attachment://musicard_finished.png')
@@ -417,7 +382,7 @@ function setupCollector(client, player, channel, message) {
             return;
         }
 
-        handleInteraction(i, player, channel);
+        handleInteraction(i, player, channel, client);
     });
 
     collector.on('end', () => {
@@ -427,13 +392,15 @@ function setupCollector(client, player, channel, message) {
     return collector;
 }
 
-async function handleInteraction(i, player, channel) {
+async function handleInteraction(i, player, channel, client) {
+    const audioManager = client.audioManager;
+    
     switch (i.customId) {
         case 'loopToggle':
             toggleLoop(player, channel);
             break;
         case 'skipTrack':
-            player.stop();
+            audioManager.skip(player.guildId);
             await sendEmbed(channel, "⏭️ **Player will play the next song!**");
             break;
         case 'disableLoop':
@@ -443,35 +410,37 @@ async function handleInteraction(i, player, channel) {
             showLyrics(channel, player);
             break;
         case 'clearQueue':
-            player.queue.clear();
+            const queue = audioManager.getQueue(player.guildId);
+            if (queue) {
+                queue.length = 0; // Clear the queue array
+            }
             await sendEmbed(channel, "🗑️ **Queue has been cleared!**");
             break;
         case 'stopTrack':
-            player.stop();
-            player.destroy();
-            await sendEmbed(channel, '⏹️ **Playback has been stopped and player destroyed!**');
+            audioManager.stop(player.guildId);
+            await sendEmbed(channel, '⏹️ **Playback has been stopped!**');
             break;
         case 'pauseTrack':
-            if (player.paused) {
+            if (audioManager.isPaused(player.guildId)) {
                 await sendEmbed(channel, '⏸️ **Playback is already paused!**');
             } else {
-                player.pause(true);
+                audioManager.pause(player.guildId);
                 await sendEmbed(channel, '⏸️ **Playback has been paused!**');
             }
             break;
         case 'resumeTrack':
-            if (!player.paused) {
+            if (!audioManager.isPaused(player.guildId)) {
                 await sendEmbed(channel, '▶️ **Playback is already resumed!**');
             } else {
-                player.pause(false);
+                audioManager.resume(player.guildId);
                 await sendEmbed(channel, '▶️ **Playback has been resumed!**');
             }
             break;
         case 'volumeUp':
-            adjustVolume(player, channel, 10);
+            adjustVolume(player, channel, 10, client);
             break;
         case 'volumeDown':
-            adjustVolume(player, channel, -10);
+            adjustVolume(player, channel, -10, client);
             break;
     }
 }
@@ -482,25 +451,27 @@ async function sendEmbed(channel, message) {
     setTimeout(() => sentMessage.delete().catch(console.error), config.embedTimeout * 1000);
 }
 
-function adjustVolume(player, channel, amount) {
-    const newVolume = Math.min(100, Math.max(10, player.volume + amount));
-    if (newVolume === player.volume) {
+function adjustVolume(player, channel, amount, client) {
+    const audioManager = client.audioManager;
+    const currentVolume = audioManager.getVolume(player.guildId);
+    const newVolume = Math.min(100, Math.max(10, currentVolume + amount));
+    if (newVolume === currentVolume) {
         sendEmbed(channel, amount > 0 ? '🔊 **Volume is already at maximum!**' : '🔉 **Volume is already at minimum!**');
     } else {
-        player.setVolume(newVolume);
+        audioManager.setVolume(player.guildId, newVolume);
         sendEmbed(channel, `🔊 **Volume changed to ${newVolume}%!**`);
     }
 }
 
 
 function toggleLoop(player, channel) {
-    player.setLoop(player.loop === "track" ? "queue" : "track");
-    sendEmbed(channel, player.loop === "track" ? "🔁 **Track loop is activated!**" : "🔁 **Queue loop is activated!**");
+    // Loop functionality not yet implemented in AudioManager
+    sendEmbed(channel, "🔁 **Loop functionality coming soon!**");
 }
 
 function disableLoop(player, channel) {
-    player.setLoop("none");
-    sendEmbed(channel, "❌ **Loop is disabled!**");
+    // Loop functionality not yet implemented in AudioManager
+    sendEmbed(channel, "❌ **Loop functionality coming soon!**");
 }
 
 
@@ -526,22 +497,20 @@ async function getLyrics(trackName, artistName, duration) {
         //console.log(`✅ Cleaned Data: ${trackName} - ${artistName} (${duration}s)`);
 
         
-        let response = await axios.get(`https://lrclib.net/api/get`, {
-            params: { track_name: trackName, artist_name: artistName, duration }
-        });
+        let response = await fetch(`https://lrclib.net/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}&duration=${duration}`);
+        let data = await response.json();
 
-        if (response.data.syncedLyrics || response.data.plainLyrics) {
-            return response.data.syncedLyrics || response.data.plainLyrics;
+        if (data.syncedLyrics || data.plainLyrics) {
+            return data.syncedLyrics || data.plainLyrics;
         }
 
        
-        response = await axios.get(`https://lrclib.net/api/get`, {
-            params: { track_name: trackName, artist_name: artistName }
-        });
+        response = await fetch(`https://lrclib.net/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}`);
+        data = await response.json();
 
-        return response.data.syncedLyrics || response.data.plainLyrics;
+        return data.syncedLyrics || data.plainLyrics;
     } catch (error) {
-        console.error("❌ Lyrics fetch error:", error.response?.data?.message || error.message);
+        console.error("❌ Lyrics fetch error:", error.message);
         return null;
     }
 }

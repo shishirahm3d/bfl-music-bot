@@ -69,44 +69,23 @@ async function playCustomPlaylist(client, interaction, lang) {
             return;
         }
 
-        const player = client.riffy.createConnection({
-            guildId: interaction.guildId,
-            voiceChannel: interaction.member.voice.channelId,
-            textChannel: interaction.channelId,
-            deaf: true
-        });
+        const player = client.audioManager.getPlayer(interaction.guildId);
+        if (!player) {
+            await client.audioManager.joinChannel(interaction.member.voice.channelId, interaction.guildId, interaction.channelId);
+        }
 
         await interaction.deferReply();
 
         for (const song of playlist.songs) {
             const query = song.url ? song.url : song.name;
-            const resolve = await client.riffy.resolve({ query: query, requester: interaction.user.username });
-            if (!resolve || typeof resolve !== 'object') {
-                throw new TypeError('Resolve response is not an object');
-            }
-
-            const { loadType, tracks } = resolve;
-            if (loadType === 'track' || loadType === 'search') {
-                const track = tracks.shift();
-                track.info.requester = interaction.user.username;
-                player.queue.add(track);
-            } else {
-                const errorEmbed = new EmbedBuilder()
-                    .setColor(config.embedColor)
-                    .setAuthor({ 
-                        name: lang.playCustomPlaylist.embed.error, 
-                        iconURL: musicIcons.alertIcon,
-                        url: config.SupportServer
-                    })
-                    .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-                    .setDescription(lang.playCustomPlaylist.embed.errorResolvingSong);
-
-                await interaction.editReply({ embeds: [errorEmbed] });
-                return;
+            try {
+                await client.audioManager.play(interaction.guildId, query, interaction.user.username);
+            } catch (err) {
+                console.error(`Error adding song to queue: ${query}`, err);
+                // Continue with next song if one fails
+                continue;
             }
         }
-
-        if (!player.playing && !player.paused) player.play();
 
         const embed = new EmbedBuilder()
             .setColor(config.embedColor)

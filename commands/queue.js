@@ -4,8 +4,11 @@ const musicIcons = require('../ui/icons/musicicons.js');
 
 async function queue(client, interaction, lang) {
     try {
-        const player = client.riffy.players.get(interaction.guildId);
-        if (!player || (!player.queue.current && player.queue.length === 0)) {
+        const player = client.audioManager.getPlayer(interaction.guildId);
+        const queue = client.audioManager.getQueue(interaction.guildId);
+        const currentTrack = client.audioManager.getCurrentTrack(interaction.guildId);
+        
+        if (!player || (!currentTrack && queue.length === 0)) {
             const embed = new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setAuthor({
@@ -20,8 +23,6 @@ async function queue(client, interaction, lang) {
             return;
         }
 
-        const currentTrack = player.queue.current;
-        const queue = player.queue;
         const songsPerPage = 10;
         const totalPages = Math.ceil((queue.length + (currentTrack ? 1 : 0)) / songsPerPage);
         let currentPage = 1;
@@ -32,12 +33,12 @@ async function queue(client, interaction, lang) {
 
             const queueItems = [];
             if (page === 1 && currentTrack) {
-                queueItems.push(`🎵 **Now Playing:** [${currentTrack.info.title}](${currentTrack.info.uri}) - Requested by: ${currentTrack.info.requester}`);
+                queueItems.push(`🎵 **Now Playing:** [${currentTrack.title}](${currentTrack.url}) - Requested by: ${currentTrack.requester?.tag || 'Unknown'}`);
             }
 
             const paginatedQueue = queue.slice(start - (currentTrack ? 1 : 0), end - (currentTrack ? 1 : 0));
             paginatedQueue.forEach((track, index) => {
-                queueItems.push(`**${start + index + 1}.** [${track.info.title}](${track.info.uri}) - Requested by: ${track.info.requester}`);
+                queueItems.push(`**${start + index + 1}.** [${track.title}](${track.url}) - Requested by: ${track.requester?.tag || 'Unknown'}`);
             });
 
             return queueItems.join('\n') || lang.queue.embed.noMoreSongs;

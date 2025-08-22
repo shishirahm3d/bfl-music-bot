@@ -12,14 +12,5 @@ module.exports = {
   activityType: "LISTENING",  // Available activity types : LISTENING , PLAYING
   SupportServer: "https://discord.gg/HhCy5Vm",
   embedTimeout: 5, 
-  errorLog: "", 
-  nodes: [
-     {
-      name: "BFL",
-      password: process.env.LAVALINK_PASSWORD,
-      host: process.env.LAVALINK_HOST,
-      port: parseInt(process.env.LAVALINK_PORT),
-      secure: false
-    }
-  ]
+  errorLog: ""
 }

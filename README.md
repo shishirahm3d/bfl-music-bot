@@ -1,14 +1,14 @@
 # BFL Music Bot
 
-A powerful Discord music bot built with Discord.js v14 and Lavalink, providing high-quality music streaming with advanced features like custom playlists, autoplay, and multi-language support.
+A powerful Discord music bot built with Discord.js v14 and a custom Node.js audio system, providing high-quality music streaming with advanced features like custom playlists, autoplay, and multi-language support.
 
 ## 🎵 Features
 
-- **High-Quality Audio Streaming** - Powered by Lavalink for superior sound quality
+- **High-Quality Audio Streaming** - Pure Node.js audio system with multi-source fallback
 - **Multi-Platform Support** - YouTube, Spotify, SoundCloud
 - **Custom Playlists** - Create, manage, and share your music collections
 - **Advanced Controls** - Play, pause, skip, shuffle, volume control, and more
-- **Audio Filters** - Various audio effects and filters
+- **Audio Processing** - Built-in audio processing with FFmpeg
 - **Multi-Language Support** - 2 languages supported (English & Bengali)
 - **Database Integration** - MongoDB for persistent data storage
 - **User-Friendly Interface** - Interactive buttons and embeds
@@ -19,7 +19,6 @@ A powerful Discord music bot built with Discord.js v14 and Lavalink, providing h
 
 - Node.js 20.x or higher
 - Discord Bot Token
-- Lavalink Server (included in config)
 - MongoDB Database (optional, for playlists)
 
 ### Installation
@@ -49,17 +48,14 @@ A powerful Discord music bot built with Discord.js v14 and Lavalink, providing h
    # Spotify API Configuration (Optional - for Spotify support)
    SPOTIFY_CLIENT_ID=YOUR_SPOTIFY_CLIENT_ID_HERE
    SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET_HERE
-
-   # Lavalink Node Configuration
-   LAVALINK_PASSWORD=YOUR_LAVALINK_PASSWORD_HERE
-   LAVALINK_HOST=YOUR_LAVALINK_HOST_HERE
-   LAVALINK_PORT=YOUR_LAVALINK_PORT_HERE
    ```
 
    You can also copy the example file:
    ```bash
    cp .env.example .env
    ```
+   
+   **Note:** Lavalink configuration is no longer needed as the bot now uses a custom Node.js audio system.
    
    Then edit the language in `config.js` (default is "en", change to "bn" for Bengali)
 
@@ -141,17 +137,20 @@ For Spotify support:
 2. Create an app and get Client ID & Secret
 3. Add them to your `.env` file as `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
 
-### Lavalink Server Setup
+### Audio System
 
-The bot requires a Lavalink server for music functionality:
+The bot uses a custom Node.js audio system with the following features:
 
-**Option 1: Use Public Lavalink (Quick Start)**
-- A working Lavalink server is pre-configured
-- Update your `.env` with the provided credentials
+**YouTube Support**
+- @distube/ytdl-core for reliable YouTube audio extraction
+- youtube-sr for YouTube search functionality
+- High-quality audio streaming
+- Direct URL and text search support
 
-**Option 2: Self-Hosted Lavalink (Recommended)**
-- Deploy your own Lavalink server
-- Update `.env` with your server details
+**Audio Processing**
+- FFmpeg-static for audio processing
+- @discordjs/voice for Discord voice connections
+- Opus encoding for high-quality audio
 
 ## 🔧 Environment Variables
 
@@ -162,20 +161,21 @@ The bot requires a Lavalink server for music functionality:
 | `MONGODB_URI` | MongoDB Connection String | ❌ Optional |
 | `SPOTIFY_CLIENT_ID` | Spotify App Client ID | ❌ Optional |
 | `SPOTIFY_CLIENT_SECRET` | Spotify App Secret | ❌ Optional |
-| `LAVALINK_PASSWORD` | Lavalink Server Password | ✅ Yes |
-| `LAVALINK_HOST` | Lavalink Server Host | ✅ Yes |
-| `LAVALINK_PORT` | Lavalink Server Port | ✅ Yes |
 
 ## 🛠️ Dependencies
 
 - **dotenv** ^16.4.7 - Environment variable management
 - **discord.js** ^14.15.1 - Discord API library
-- **riffy** ^1.0.3 - Lavalink client
+- **@discordjs/voice** ^0.19.0 - Discord voice connections
+- **@distube/ytdl-core** ^4.16.12 - YouTube audio extraction
+- **youtube-sr** ^4.3.11 - YouTube search functionality
 - **mongodb** ^6.12.0 - Database driver
 - **spotify-web-api-node** ^5.0.2 - Spotify API
-- **axios** ^1.8.1 - HTTP client
+- **node-fetch** ^3.3.2 - HTTP client
 - **express** ^4.19.2 - Web server
 - **musicard** ^2.0.5 - Music card generation
+- **ffmpeg-static** ^5.2.0 - Audio processing
+- **@discordjs/opus** ^0.9.0 - Audio encoding
 
 ## 📝 License
 
